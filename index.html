@@ -3,9 +3,9 @@
 <head>
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width, initial-scale=1.0">
-<title>Dodge Dash - Pro Starter</title>
+<title>Dodge Dash - Responsive</title>
 <style>
-    * { margin: 0; padding: 0; box-sizing: border-box; }
+  * { margin: 0; padding: 0; box-sizing: border-box; }
   body { 
     background: #0a0a0f; 
     display: flex; 
@@ -19,6 +19,7 @@
     background: linear-gradient(180deg, #1a1a2e 0%, #0a0a0f 100%);
     border: 2px solid #16213e;
     box-shadow: 0 0 30px rgba(0, 212, 255, 0.2);
+    display: block;
   }
   #ui {
     position: absolute;
@@ -26,7 +27,7 @@
     left: 50%;
     transform: translateX(-50%);
     color: #00d4ff;
-    font-size: 24px;
+    font-size: 4vw; /* scales with screen width */
     font-weight: 600;
     text-shadow: 0 0 10px #00d4ff;
   }
@@ -34,7 +35,7 @@
 </head>
 <body>
 <div id="ui">Score: <span id="score">0</span></div>
-<canvas id="game" width="800" height="600"></canvas>
+<canvas id="game"></canvas>
 
 <script>
 const canvas = document.getElementById('game');
@@ -53,10 +54,16 @@ const Game = {
 class Player {
   constructor() {
     this.w = 40; this.h = 40;
+    this.x = 0; this.y = 0;
+    this.speed = 0;
+    this.color = '#00d4ff';
+    this.resetPosition();
+  }
+  
+  resetPosition() {
     this.x = canvas.width / 2 - this.w / 2;
     this.y = canvas.height - this.h - 20;
-    this.speed = 400;
-    this.color = '#00d4ff';
+    this.speed = canvas.width / 2; // scales with screen size
   }
   
   update(dt, keys) {
@@ -83,7 +90,7 @@ class Obstacle {
     this.h = 30 + Math.random() * 30;
     this.x = Math.random() * (canvas.width - this.w);
     this.y = -this.h;
-    this.speed = 200 + Math.random() * 200;
+    this.speed = canvas.height / 3 + Math.random() * (canvas.height / 3);
     this.color = `hsl(${Math.random()*60 + 340}, 100%, 60%)`;
   }
   
@@ -130,7 +137,6 @@ function update(dt) {
       Game.score += 10;
       scoreEl.textContent = Game.score;
     }
-    // Collision check
     else if (rectCollision(player.getBounds(), obstacles[i].getBounds())) {
       Game.running = false;
     }
@@ -153,12 +159,12 @@ function draw() {
     ctx.fillStyle = 'rgba(0,0,0,0.7)';
     ctx.fillRect(0, 0, canvas.width, canvas.height);
     ctx.fillStyle = '#fff';
-    ctx.font = '48px Segoe UI';
+    ctx.font = `${canvas.width/15}px Segoe UI`;
     ctx.textAlign = 'center';
     ctx.fillText('GAME OVER', canvas.width/2, canvas.height/2);
-    ctx.font = '24px Segoe UI';
+    ctx.font = `${canvas.width/30}px Segoe UI`;
     ctx.fillText(`Final Score: ${Game.score}`, canvas.width/2, canvas.height/2 + 50);
-    ctx.fillText('Press R to Restart', canvas.width/2, canvas.height/2 + 90);
+    ctx.fillText('Press R or Tap to Restart', canvas.width/2, canvas.height/2 + 90);
   }
 }
 
@@ -174,14 +180,38 @@ function gameLoop(timestamp) {
 // ===== INPUT =====
 window.addEventListener('keydown', e => {
   keys[e.key] = true;
-  if (e.key === 'r' && !Game.running) {
-    Game.running = true;
-    Game.score = 0;
-    obstacles.length = 0;
-    scoreEl.textContent = 0;
-  }
+  if (e.key === 'r' && !Game.running) restartGame();
 });
 window.addEventListener('keyup', e => keys[e.key] = false);
+
+// Touch controls
+canvas.addEventListener('touchstart', e => {
+  const touchX = e.touches[0].clientX;
+  if (touchX < canvas.width / 2) keys['ArrowLeft'] = true;
+  else keys['ArrowRight'] = true;
+  if (!Game.running) restartGame();
+});
+canvas.addEventListener('touchend', () => {
+  keys['ArrowLeft'] = false;
+  keys['ArrowRight'] = false;
+});
+
+// ===== RESIZE =====
+function resizeCanvas() {
+  canvas.width = window.innerWidth;
+  canvas.height = window.innerHeight;
+  player.resetPosition();
+}
+resizeCanvas();
+window.addEventListener('resize', resizeCanvas);
+
+// ===== RESTART =====
+function restartGame() {
+  Game.running = true;
+  Game.score = 0;
+  obstacles.length = 0;
+  scoreEl.textContent = 0;
+}
 
 // ===== START =====
 requestAnimationFrame(gameLoop);
