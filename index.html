@@ -23,149 +23,235 @@
   }
   #ui {
     position: absolute;
-    top: 0;
-    left: 0;
-    width: 100%;
-    background: rgba(10,10,15,0.9);
-    padding: 10px;
+    top: 20px;
+    left: 50%;
+    transform: translateX(-50%);
     color: #00d4ff;
-    font-size: 1.2em;
-    display: flex;
-    justify-content: space-between;
-    align-items: center;
+    font-size: 4vw; /* scales with screen width */
+    font-weight: 600;
     text-shadow: 0 0 10px #00d4ff;
-  }
-  #signin {
-    cursor: pointer;
-    background: #00d4ff;
-    color: #0a0a0f;
-    border: none;
-    padding: 5px 15px;
-    border-radius: 5px;
-    font-weight: bold;
   }
 </style>
 </head>
 <body>
-<div id="ui">
-  <div id="user">Not signed in</div>
-  <div>Score: <span id="score">0</span></div>
-  <button id="signin">Sign In with Google</button>
-</div>
+<div id="ui">Score: <span id="score">0</span></div>
 <canvas id="game"></canvas>
-
-<!-- Firebase SDK -->
+<!-- Add Firebase SDK -->
 <script src="https://www.gstatic.com/firebasejs/9.0.0/firebase-app.js"></script>
 <script src="https://www.gstatic.com/firebasejs/9.0.0/firebase-auth.js"></script>
 <script src="https://www.gstatic.com/firebasejs/9.0.0/firebase-firestore.js"></script>
 
 <script>
-/* ===== FIREBASE SETUP ===== */
-const firebaseConfig = {
-  apiKey: "YOUR_API_KEY",
-  authDomain: "YOUR_PROJECT_ID.firebaseapp.com",
-  projectId: "YOUR_PROJECT_ID"
-};
-firebase.initializeApp(firebaseConfig);
-const auth = firebase.auth();
-const db = firebase.firestore();
+  // Initialize Firebase
+  const firebaseConfig = {
+    apiKey: "YOUR_API_KEY",
+    authDomain: "YOUR_PROJECT.firebaseapp.com",
+    projectId: "YOUR_PROJECT_ID"
+  };
+  const app = firebase.initializeApp(firebaseConfig);
+  const auth = firebase.auth();
+  const db = firebase.firestore();
 
-const signinBtn = document.getElementById('signin');
-const userEl = document.getElementById('user');
-
-signinBtn.addEventListener('click', () => {
-  const provider = new firebase.auth.GoogleAuthProvider();
-  auth.signInWithPopup(provider).then(result => {
-    const user = result.user;
-    userEl.textContent = `Welcome, ${user.displayName}`;
-    signinBtn.style.display = 'none';
-    loadHighScore(user.uid);
-  });
-});
-
-function loadHighScore(uid) {
-  db.collection("users").doc(uid).get().then(doc => {
-    if (doc.exists) {
-      const data = doc.data();
-      userEl.textContent += ` | High Score: ${data.highScore || 0}`;
-    }
-  });
-}
-
-function saveScore(score) {
-  const user = auth.currentUser;
-  if (user) {
-    const ref = db.collection("users").doc(user.uid);
-    ref.get().then(doc => {
-      const prev = doc.exists ? doc.data().highScore || 0 : 0;
-      if (score > prev) {
-        ref.set({ highScore: score, lastPlayed: new Date() }, { merge: true });
-        userEl.textContent = `Welcome, ${user.displayName} | High Score: ${score}`;
-      }
+  // Sign in with Google
+  function signIn() {
+    const provider = new firebase.auth.GoogleAuthProvider();
+    auth.signInWithPopup(provider).then(result => {
+      const user = result.user;
+      document.getElementById('ui').innerHTML = 
+        `Welcome ${user.displayName} | Score: <span id="score">0</span>`;
     });
   }
-}
 
-/* ===== GAME CODE ===== */
+  // Save score after game over
+  function saveScore(score) {
+    const user = auth.currentUser;
+    if (user) {
+      db.collection("users").doc(user.uid).set({
+        highScore: score,
+        lastPlayed: new Date()
+      }, { merge: true });
+    }
+  }
+</script>
+
+<script>
 const canvas = document.getElementById('game');
 const ctx = canvas.getContext('2d');
 const scoreEl = document.getElementById('score');
 
-const Game = { running: true, score: 0, lastTime: 0, spawnTimer: 0 };
+// ===== GAME STATE =====
+const Game = {
+  running: true,
+  score: 0,
+  lastTime: 0,
+  spawnTimer: 0
+}
 
+// ===== PLAYER CLASS =====
 class Player {
-  constructor() { this.w=40; this.h=40; this.color='#00d4ff'; this.resetPosition(); }
-  resetPosition() { this.x=canvas.width/2-this.w/2; this.y=canvas.height-this.h-20; this.speed=canvas.width/2; }
+  constructor() {
+    this.w = 40; this.h = 40;
+    this.x = 0; this.y = 0;
+    this.speed = 0;
+    this.color = '#00d4ff';
+    this.resetPosition();
+  }
+  
+  resetPosition() {
+    this.x = canvas.width / 2 - this.w / 2;
+    this.y = canvas.height - this.h - 20;
+    this.speed = canvas.width / 2; // scales with screen size
+  }
+  
   update(dt, keys) {
-    if (keys['ArrowLeft']||keys['a']) this.x-=this.speed*dt;
-    if (keys['ArrowRight']||keys['d']) this.x+=this.speed*dt;
-    this.x=Math.max(0,Math.min(canvas.width-this.w,this.x));
+    if (keys['ArrowLeft'] || keys['a']) this.x -= this.speed * dt;
+    if (keys['ArrowRight'] || keys['d']) this.x += this.speed * dt;
+    this.x = Math.max(0, Math.min(canvas.width - this.w, this.x));
   }
-  draw() { ctx.fillStyle=this.color; ctx.shadowBlur=20; ctx.shadowColor=this.color; ctx.fillRect(this.x,this.y,this.w,this.h); ctx.shadowBlur=0; }
-  getBounds(){return{x:this.x,y:this.y,w:this.w,h:this.h};}
+  
+  draw() {
+    ctx.fillStyle = this.color;
+    ctx.shadowBlur = 20;
+    ctx.shadowColor = this.color;
+    ctx.fillRect(this.x, this.y, this.w, this.h);
+    ctx.shadowBlur = 0;
+  }
+  
+  getBounds() { return {x: this.x, y: this.y, w: this.w, h: this.h}; }
 }
 
+// ===== OBSTACLE CLASS =====
 class Obstacle {
-  constructor(){this.w=30+Math.random()*30;this.h=30+Math.random()*30;this.x=Math.random()*(canvas.width-this.w);this.y=-this.h;this.speed=canvas.height/3+Math.random()*(canvas.height/3);this.color=`hsl(${Math.random()*60+340},100%,60%)`;}
-  update(dt){this.y+=this.speed*dt;return this.y>canvas.height;}
-  draw(){ctx.fillStyle=this.color;ctx.shadowBlur=15;ctx.shadowColor=this.color;ctx.fillRect(this.x,this.y,this.w,this.h);ctx.shadowBlur=0;}
-  getBounds(){return{x:this.x,y:this.y,w:this.w,h:this.h};}
+  constructor() {
+    this.w = 30 + Math.random() * 30;
+    this.h = 30 + Math.random() * 30;
+    this.x = Math.random() * (canvas.width - this.w);
+    this.y = -this.h;
+    this.speed = canvas.height / 3 + Math.random() * (canvas.height / 3);
+    this.color = `hsl(${Math.random()*60 + 340}, 100%, 60%)`;
+  }
+  
+  update(dt) {
+    this.y += this.speed * dt;
+    return this.y > canvas.height;
+  }
+  
+  draw() {
+    ctx.fillStyle = this.color;
+    ctx.shadowBlur = 15;
+    ctx.shadowColor = this.color;
+    ctx.fillRect(this.x, this.y, this.w, this.h);
+    ctx.shadowBlur = 0;
+  }
+  
+  getBounds() { return {x: this.x, y: this.y, w: this.w, h: this.h}; }
 }
 
-const player=new Player();const obstacles=[];const keys={};
-function rectCollision(a,b){return a.x<b.x+b.w&&a.x+a.w>b.x&&a.y<b.y+b.h&&a.y+a.h>b.y;}
-function update(dt){
-  player.update(dt,keys);
-  Game.spawnTimer+=dt;
-  if(Game.spawnTimer>0.6){obstacles.push(new Obstacle());Game.spawnTimer=0;}
-  for(let i=obstacles.length-1;i>=0;i--){
-    if(obstacles[i].update(dt)){obstacles.splice(i,1);Game.score+=10;scoreEl.textContent=Game.score;}
-    else if(rectCollision(player.getBounds(),obstacles[i].getBounds())){Game.running=false;saveScore(Game.score);}
+// ===== GAME LOGIC =====
+const player = new Player();
+const obstacles = [];
+const keys = {};
+
+function rectCollision(a, b) {
+  return a.x < b.x + b.w && a.x + a.w > b.x && 
+         a.y < b.y + b.h && a.y + a.h > b.y;
+}
+
+function update(dt) {
+  player.update(dt, keys);
+  
+  // Spawn obstacles
+  Game.spawnTimer += dt;
+  if (Game.spawnTimer > 0.6) {
+    obstacles.push(new Obstacle());
+    Game.spawnTimer = 0;
+  }
+  
+  // Update obstacles
+  for (let i = obstacles.length - 1; i >= 0; i--) {
+    if (obstacles[i].update(dt)) {
+      obstacles.splice(i, 1);
+      Game.score += 10;
+      scoreEl.textContent = Game.score;
+    }
+    else if (rectCollision(player.getBounds(), obstacles[i].getBounds())) {
+      Game.running = false;
+    }
   }
 }
-function draw(){
-  ctx.clearRect(0,0,canvas.width,canvas.height);
-  ctx.strokeStyle='rgba(0,212,255,0.05)';
-  for(let i=0;i<canvas.width;i+=40){ctx.beginPath();ctx.moveTo(i,0);ctx.lineTo(i,canvas.height);ctx.stroke();}
-  player.draw();obstacles.forEach(o=>o.draw());
-  if(!Game.running){
-    ctx.fillStyle='rgba(0,0,0,0.7)';ctx.fillRect(0,0,canvas.width,canvas.height);
-    ctx.fillStyle='#fff';ctx.font=`${canvas.width/15}px Segoe UI`;ctx.textAlign='center';
-    ctx.fillText('GAME OVER',canvas.width/2,canvas.height/2);
-    ctx.font=`${canvas.width/30}px Segoe UI`;
-    ctx.fillText(`Final Score: ${Game.score}`,canvas.width/2,canvas.height/2+50);
-    ctx.fillText('Press R or Tap to Restart',canvas.width/2,canvas.height/2+90);
+
+function draw() {
+  ctx.clearRect(0, 0, canvas.width, canvas.height);
+  
+  // Grid background
+  ctx.strokeStyle = 'rgba(0, 212, 255, 0.05)';
+  for(let i = 0; i < canvas.width; i += 40) {
+    ctx.beginPath(); ctx.moveTo(i, 0); ctx.lineTo(i, canvas.height); ctx.stroke();
+  }
+  
+  player.draw();
+  obstacles.forEach(o => o.draw());
+  
+  if (!Game.running) {
+    ctx.fillStyle = 'rgba(0,0,0,0.7)';
+    ctx.fillRect(0, 0, canvas.width, canvas.height);
+    ctx.fillStyle = '#fff';
+    ctx.font = `${canvas.width/15}px Segoe UI`;
+    ctx.textAlign = 'center';
+    ctx.fillText('GAME OVER', canvas.width/2, canvas.height/2);
+    ctx.font = `${canvas.width/30}px Segoe UI`;
+    ctx.fillText(`Final Score: ${Game.score}`, canvas.width/2, canvas.height/2 + 50);
+    ctx.fillText('Press R or Tap to Restart', canvas.width/2, canvas.height/2 + 90);
   }
 }
-function gameLoop(timestamp){const dt=(timestamp-Game.lastTime)/1000;Game.lastTime=timestamp;if(Game.running)update(dt);draw();requestAnimationFrame(gameLoop);}
-window.addEventListener('keydown',e=>{keys[e.key]=true;if(e.key==='r'&&!Game.running)restartGame();});
-window.addEventListener('keyup',e=>keys[e.key]=false);
-canvas.addEventListener('touchstart',e=>{const touchX=e.touches[0].clientX;if(touchX<canvas.width/2)keys['ArrowLeft']=true;else keys['ArrowRight']=true;if(!Game.running)restartGame();});
-canvas.addEventListener('touchend',()=>{keys['ArrowLeft']=false;keys['ArrowRight']=false;});
-function resizeCanvas(){canvas.width=window.innerWidth;canvas.height=window.innerHeight;player.resetPosition();}
-resizeCanvas();window.addEventListener('resize',resizeCanvas);
-function restartGame(){Game.running=true;Game.score=0;obstacles.length=0;scoreEl.textContent=0;}
+
+function gameLoop(timestamp) {
+  const dt = (timestamp - Game.lastTime) / 1000;
+  Game.lastTime = timestamp;
+  
+  if (Game.running) update(dt);
+  draw();
+  requestAnimationFrame(gameLoop);
+}
+
+// ===== INPUT =====
+window.addEventListener('keydown', e => {
+  keys[e.key] = true;
+  if (e.key === 'r' && !Game.running) restartGame();
+});
+window.addEventListener('keyup', e => keys[e.key] = false);
+
+// Touch controls
+canvas.addEventListener('touchstart', e => {
+  const touchX = e.touches[0].clientX;
+  if (touchX < canvas.width / 2) keys['ArrowLeft'] = true;
+  else keys['ArrowRight'] = true;
+  if (!Game.running) restartGame();
+});
+canvas.addEventListener('touchend', () => {
+  keys['ArrowLeft'] = false;
+  keys['ArrowRight'] = false;
+});
+
+// ===== RESIZE =====
+function resizeCanvas() {
+  canvas.width = window.innerWidth;
+  canvas.height = window.innerHeight;
+  player.resetPosition();
+}
+resizeCanvas();
+window.addEventListener('resize', resizeCanvas);
+
+// ===== RESTART =====
+function restartGame() {
+  Game.running = true;
+  Game.score = 0;
+  obstacles.length = 0;
+  scoreEl.textContent = 0;
+}
+
+// ===== START =====
 requestAnimationFrame(gameLoop);
 </script>
 </body>
-</html>
+</html> 
